@@ -206,6 +206,29 @@ def main():
         else:
             mlflow.sklearn.log_model(best_model, "final_model")
 
+    # Diagnostic: print the top features driving the selected model's
+    # predictions. This is a leakage sanity-check as much as an
+    # explainability step - if a feature that shouldn't plausibly matter
+    # this much (e.g. a missing-value indicator, or a rank field that
+    # perfectly tracks which raw data source a row came from) dominates
+    # the list, that's a strong signal something is leaking the label
+    # through a shortcut rather than genuine phishing characteristics,
+    # not a sign of a great model.
+    print("\n=== Feature importance / coefficients for the selected model (leakage sanity check) ===")
+    feature_names = X_train.columns.tolist()
+    if hasattr(best_model, "feature_importances_"):
+        importances = best_model.feature_importances_
+        ranked = sorted(zip(feature_names, importances), key=lambda x: -abs(x[1]))
+        for name, val in ranked[:15]:
+            print(f"  {name:<40} {val:.4f}")
+    elif hasattr(best_model, "coef_"):
+        coefs = best_model.coef_[0]
+        ranked = sorted(zip(feature_names, coefs), key=lambda x: -abs(x[1]))
+        for name, val in ranked[:15]:
+            print(f"  {name:<40} {val:+.4f}")
+    else:
+        print("  (Selected model type doesn't expose feature importances/coefficients directly.)")
+
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(best_model, MODELS_DIR / "model.pkl")
 

@@ -208,14 +208,13 @@ class URLFeatureExtractor:
             feats.dns_resolves = 0
 
         # Tranco rank (proxy for the old "web_traffic"/"Page_Rank" features,
-        # but backed by a real, downloadable, current ranking dataset)
+        # but backed by a real, downloadable, current ranking dataset).
+        # self.tranco_list is now a plain {domain: rank} dict (see
+        # load_tranco_list()) - a dict miss unambiguously means "not in the
+        # top 1M", returned as None, with no sentinel-value ambiguity.
         if self.tranco_list is not None:
-            try:
-                rank = self.tranco_list.rank(registered_domain)
-                # tranco returns a large sentinel int (not in list); normalize to None
-                feats.tranco_rank = float(rank) if rank and rank < 10_000_000 else None
-            except Exception:
-                feats.tranco_rank = None
+            rank = self.tranco_list.get(registered_domain)
+            feats.tranco_rank = float(rank) if rank is not None else None
 
         # WHOIS lookup - this is the slowest and least reliable call. Many
         # registrars throttle, misconfigure, or drop automated WHOIS queries,
@@ -353,10 +352,24 @@ def _as_utc(dt: datetime) -> datetime:
 
 
 def load_tranco_list():
-    """Load the Tranco top-sites list. Downloads/caches it on first call
-    (requires internet - this environment cannot run it, but your machine can).
+    """Load the Tranco top-sites list as an explicit {domain: rank} lookup dict.
+
+    Deliberately built as our own dict rather than relying on the tranco
+    package's TrancoList.rank() method for out-of-list domains: testing on
+    real data showed that method returns a finite sentinel value for
+    domains outside the loaded list rather than a clean "not found" signal.
+    Since every legitimate URL in this project was SOURCED from Tranco,
+    every legitimate row always got a real, present rank - while phishing
+    URLs (which are essentially never globally popular domains) all got
+    the same sentinel value. That made "does this row have a real Tranco
+    rank" a near-perfect proxy for "which data source did this URL come
+    from," not a genuine popularity signal - a serious, silent data leakage
+    bug. This explicit dict makes "not found" unambiguous: a plain Python
+    dict lookup miss, returned as None, every time.
     """
     if not _TRANCO_AVAILABLE:
         raise ImportError("pip install tranco")
     t = Tranco(cache=True, cache_dir=".tranco_cache")
-    return t.list()
+    tlist = t.list()
+    top_1m = tlist.top(1_000_000)
+    return {domain: rank for rank, domain in enumerate(top_1m, start=1)}
