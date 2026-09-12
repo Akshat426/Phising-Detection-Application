@@ -1,0 +1,198 @@
+[
+  {
+    "feature": "path_length",
+    "mean_abs_shap": 1.8272600173950195
+  },
+  {
+    "feature": "hostname_length",
+    "mean_abs_shap": 1.3668664693832397
+  },
+  {
+    "feature": "num_internal_links",
+    "mean_abs_shap": 1.2042663097381592
+  },
+  {
+    "feature": "tranco_rank_was_missing",
+    "mean_abs_shap": 0.9522960782051086
+  },
+  {
+    "feature": "tranco_rank",
+    "mean_abs_shap": 0.8445612192153931
+  },
+  {
+    "feature": "num_digits",
+    "mean_abs_shap": 0.6730684041976929
+  },
+  {
+    "feature": "num_slashes",
+    "mean_abs_shap": 0.6266830563545227
+  },
+  {
+    "feature": "num_subdomains",
+    "mean_abs_shap": 0.5315032005310059
+  },
+  {
+    "feature": "uses_https",
+    "mean_abs_shap": 0.3509988486766815
+  },
+  {
+    "feature": "domain_age_days",
+    "mean_abs_shap": 0.32313477993011475
+  },
+  {
+    "feature": "num_external_links",
+    "mean_abs_shap": 0.23654361069202423
+  },
+  {
+    "feature": "url_length",
+    "mean_abs_shap": 0.20365355908870697
+  },
+  {
+    "feature": "domain_registration_length_days",
+    "mean_abs_shap": 0.12896747887134552
+  },
+  {
+    "feature": "external_link_ratio",
+    "mean_abs_shap": 0.12502430379390717
+  },
+  {
+    "feature": "num_scripts",
+    "mean_abs_shap": 0.12044936418533325
+  },
+  {
+    "feature": "domain_age_days_was_missing",
+    "mean_abs_shap": 0.11318810284137726
+  },
+  {
+    "feature": "num_dots",
+    "mean_abs_shap": 0.08938682824373245
+  },
+  {
+    "feature": "response_status_code",
+    "mean_abs_shap": 0.07318545132875443
+  },
+  {
+    "feature": "num_hyphens",
+    "mean_abs_shap": 0.05310472473502159
+  },
+  {
+    "feature": "num_equals",
+    "mean_abs_shap": 0.04710635542869568
+  },
+  {
+    "feature": "domain_registration_length_days_was_missing",
+    "mean_abs_shap": 0.04639671370387077
+  },
+  {
+    "feature": "num_iframes",
+    "mean_abs_shap": 0.038632094860076904
+  },
+  {
+    "feature": "title_hostname_overlap",
+    "mean_abs_shap": 0.024135706946253777
+  },
+  {
+    "feature": "num_forms",
+    "mean_abs_shap": 0.016296397894620895
+  },
+  {
+    "feature": "favicon_external",
+    "mean_abs_shap": 0.009494999423623085
+  },
+  {
+    "feature": "num_question_marks",
+    "mean_abs_shap": 0.009077667258679867
+  },
+  {
+    "feature": "num_forms_was_missing",
+    "mean_abs_shap": 0.008258497342467308
+  },
+  {
+    "feature": "form_action_external_ratio_was_missing",
+    "mean_abs_shap": 0.007937396876513958
+  },
+  {
+    "feature": "is_known_shortener",
+    "mean_abs_shap": 0.005187673959881067
+  },
+  {
+    "feature": "num_iframes_was_missing",
+    "mean_abs_shap": 0.003944367170333862
+  },
+  {
+    "feature": "dns_resolves",
+    "mean_abs_shap": 0.003923381678760052
+  },
+  {
+    "feature": "num_underscores",
+    "mean_abs_shap": 0.0008765975362621248
+  },
+  {
+    "feature": "has_password_field",
+    "mean_abs_shap": 0.0007532875752076507
+  },
+  {
+    "feature": "form_action_external_ratio",
+    "mean_abs_shap": 0.00018887766054831445
+  },
+  {
+    "feature": "num_percent",
+    "mean_abs_shap": 0.00018143463239539415
+  },
+  {
+    "feature": "brand_keyword_in_subdomain",
+    "mean_abs_shap": 0.00011782012006733567
+  },
+  {
+    "feature": "num_at_symbols",
+    "mean_abs_shap": 6.716265488648787e-05
+  },
+  {
+    "feature": "has_ip_address",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "has_port",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "double_slash_in_path",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "suspicious_tld_in_path",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "num_external_links_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "num_internal_links_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "external_link_ratio_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "has_password_field_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "favicon_external_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "num_scripts_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "title_hostname_overlap_was_missing",
+    "mean_abs_shap": 0.0
+  },
+  {
+    "feature": "response_status_code_was_missing",
+    "mean_abs_shap": 0.0
+  }
+]
