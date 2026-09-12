@@ -30,6 +30,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import warnings
 from pathlib import Path
@@ -61,13 +62,19 @@ CV_FOLDS = 5
 SEARCH_ITER = 25  # RandomizedSearchCV draws this many hyperparameter combinations
 
 
-def load_split(name: str) -> tuple[pd.DataFrame, pd.Series]:
+def load_split(name: str, exclude_features: list[str] | None = None) -> tuple[pd.DataFrame, pd.Series]:
     path = PROCESSED_DIR / f"{name}_transformed.csv"
     if not path.exists():
         raise FileNotFoundError(f"{path} not found - run transformation.py first.")
     df = pd.read_csv(path)
     y = df["label"]
     X = df.drop(columns=["label"])
+    if exclude_features:
+        present = [c for c in exclude_features if c in X.columns]
+        missing = [c for c in exclude_features if c not in X.columns]
+        if missing:
+            print(f"  Note: --exclude-features listed columns not found (already absent): {missing}")
+        X = X.drop(columns=present)
     return X, y
 
 
@@ -136,9 +143,27 @@ def evaluate(model, X, y) -> dict:
 
 
 def main():
-    X_train, y_train = load_split("train")
-    X_val, y_val = load_split("validation")
-    X_test, y_test = load_split("test")
+    parser = argparse.ArgumentParser(description="Train and compare phishing detection models")
+    parser.add_argument(
+        "--exclude-features", type=str, default=None,
+        help="Comma-separated feature names to drop before training (for ablation experiments, "
+             "e.g. --exclude-features tranco_rank,tranco_rank_was_missing)",
+    )
+    parser.add_argument(
+        "--output-suffix", type=str, default=None,
+        help="Suffix for output files, e.g. --output-suffix ablation_no_tranco keeps this run's "
+             "model.pkl and comparison report separate from your main final_model/model.pkl, "
+             "so an experiment never silently overwrites your primary submitted model.",
+    )
+    args = parser.parse_args()
+
+    exclude_features = [f.strip() for f in args.exclude_features.split(",")] if args.exclude_features else None
+    if exclude_features:
+        print(f"ABLATION MODE: excluding features {exclude_features}\n")
+
+    X_train, y_train = load_split("train", exclude_features)
+    X_val, y_val = load_split("validation", exclude_features)
+    X_test, y_test = load_split("test", exclude_features)
 
     print(f"Train: {X_train.shape}, Validation: {X_val.shape}, Test: {X_test.shape}")
     print(f"Train class balance:\n{y_train.value_counts(normalize=True)}")
@@ -230,18 +255,22 @@ def main():
         print("  (Selected model type doesn't expose feature importances/coefficients directly.)")
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best_model, MODELS_DIR / "model.pkl")
+    suffix = f"_{args.output_suffix}" if args.output_suffix else ""
+    model_path = MODELS_DIR / f"model{suffix}.pkl"
+    report_path = MODELS_DIR / f"model_comparison{suffix}.json"
+    joblib.dump(best_model, model_path)
 
     comparison_report = {
+        "excluded_features": exclude_features,
         "validation_results": val_results,
         "selected_model": best_name,
         "test_metrics": test_metrics,
     }
-    with open(MODELS_DIR / "model_comparison.json", "w") as f:
+    with open(report_path, "w") as f:
         json.dump(comparison_report, f, indent=2)
 
-    print(f"\nSaved best model -> {MODELS_DIR / 'model.pkl'}")
-    print(f"Saved comparison report -> {MODELS_DIR / 'model_comparison.json'}")
+    print(f"\nSaved best model -> {model_path}")
+    print(f"Saved comparison report -> {report_path}")
 
 
 if __name__ == "__main__":
