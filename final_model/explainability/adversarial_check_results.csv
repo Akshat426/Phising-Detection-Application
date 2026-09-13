@@ -1,0 +1,12 @@
+url,strategy,perturbed_url,original_prob,new_prob,evaded
+https://we3ibma1l.github.io/tryingoff,strip_path_only,https://we3ibma1l.github.io,0.9955520033836365,0.18367335200309753,True
+https://we3ibma1l.github.io/tryingoff,combined_all_three,https://we3ibma1l.github.io,0.9955520033836365,0.18367335200309753,True
+https://dhjcf.weebly.com/,strip_path_only,https://dhjcf.weebly.com,0.9532449245452881,0.008001782931387424,True
+https://dhjcf.weebly.com/,combined_all_three,https://dhjcf.weebly.com,0.9532449245452881,0.008001782931387424,True
+https://gudwa.com/Reader_Adobe/,strip_path_only,https://gudwa.com,0.9957754015922546,0.3671959936618805,True
+https://gudwa.com/Reader_Adobe/,combined_all_three,https://gudwa.com,0.9957754015922546,0.3671959936618805,True
+https://sir-frotscher.github.io/clone-netflix/,strip_path_only,https://sir-frotscher.github.io,0.9925243258476257,0.20675337314605713,True
+https://sir-frotscher.github.io/clone-netflix/,combined_all_three,https://sir-frotscher.github.io,0.9925243258476257,0.20675337314605713,True
+http://www.xfinitymailnow.weebly.com/,https_only,https://www.xfinitymailnow.weebly.com/,0.9992243051528931,0.9969122409820557,False
+http://www.xfinitymailnow.weebly.com/,strip_path_only,http://www.xfinitymailnow.weebly.com,0.9992243051528931,0.32399117946624756,True
+http://www.xfinitymailnow.weebly.com/,combined_all_three,https://www.xfinitymailnow.weebly.com,0.9992243051528931,0.1174955889582634,True
