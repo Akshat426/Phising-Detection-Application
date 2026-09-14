@@ -31,77 +31,18 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
 
 import joblib
 import pandas as pd
-import tldextract
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from features.feature_extractor import URLFeatureExtractor  # noqa: E402
 from features.transformation import DataTransformer  # noqa: E402
+from features.url_perturbations import STRATEGIES, LEXICAL_FEATURES  # noqa: E402
 
 PROCESSED_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
 MODELS_DIR = Path(__file__).resolve().parents[2] / "final_model"
 TRANSFORM_ARTIFACTS_DIR = PROCESSED_DIR / "transform_artifacts"
-
-# Offline suffix list, matching feature_extractor.py's approach - reproducible,
-# no network dependency for a simple hostname-parsing operation.
-_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
-
-LEXICAL_FEATURES = [
-    "url_length", "hostname_length", "path_length", "num_dots", "num_hyphens",
-    "num_underscores", "num_slashes", "num_question_marks", "num_equals",
-    "num_at_symbols", "num_percent", "num_digits", "num_subdomains",
-    "has_ip_address", "uses_https", "has_port", "is_known_shortener",
-    "double_slash_in_path", "suspicious_tld_in_path", "brand_keyword_in_subdomain",
-]
-
-BRAND_KEYWORDS = ["paypal", "amazon", "apple", "microsoft", "google", "bank", "secure", "login", "account"]
-
-
-def to_https(url: str) -> str:
-    parsed = urlparse(url)
-    return urlunparse(parsed._replace(scheme="https"))
-
-
-def strip_path(url: str) -> str:
-    parsed = urlparse(url)
-    return urlunparse(parsed._replace(path="", query="", fragment=""))
-
-
-def remove_brand_subdomain(url: str) -> str:
-    """Removes brand-keyword-containing labels from the SUBDOMAIN only,
-    never touching the registrable domain (the part an attacker actually
-    owns/controls). An earlier version of this function operated on the
-    whole hostname and could accidentally strip parts of the domain itself
-    (e.g. "verify-account-xyz123.com" losing "verify-account-xyz123"
-    because "account" matched the keyword list), producing a nonsensical,
-    unrealistic URL like "http://com/..." - caught during testing before
-    this script was ever run against real data.
-    """
-    parsed = urlparse(url)
-    ext = _TLD_EXTRACT(url)
-    if not ext.subdomain:
-        return url  # nothing to remove
-
-    sub_labels = ext.subdomain.split(".")
-    cleaned_labels = [l for l in sub_labels if not any(kw in l.lower() for kw in BRAND_KEYWORDS)]
-    if cleaned_labels == sub_labels:
-        return url  # no brand keywords found in the subdomain - unchanged
-
-    registrable_domain = f"{ext.domain}.{ext.suffix}" if ext.suffix else ext.domain
-    new_hostname = ".".join(cleaned_labels + [registrable_domain]) if cleaned_labels else registrable_domain
-    new_netloc = new_hostname if not parsed.port else f"{new_hostname}:{parsed.port}"
-    return urlunparse(parsed._replace(netloc=new_netloc))
-
-
-STRATEGIES = {
-    "https_only": to_https,
-    "strip_path_only": strip_path,
-    "remove_brand_subdomain_only": remove_brand_subdomain,
-    "combined_all_three": lambda u: remove_brand_subdomain(strip_path(to_https(u))),
-}
 
 
 def main():
