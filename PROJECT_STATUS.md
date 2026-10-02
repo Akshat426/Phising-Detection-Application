@@ -101,9 +101,19 @@ dominated by genuine signals (internal link count, hostname length, brand
 keywords in subdomains, etc.) rather than a single dominant artifact.
 
 An ablation (`--exclude-features tranco_rank,tranco_rank_was_missing`)
-quantified the remaining, structurally-unavoidable residual signal: F1 drops
-from 0.968 to 0.944 without it — a real but moderate contribution, honestly
+quantified the residual signal under two setups: F1 drops from 0.968 to
+0.944 before adversarial augmentation (Section below), and from 0.964 to
+0.953 in the final pipeline — a real but moderate contribution, honestly
 reported rather than hidden.
+
+**Correction to an earlier assumption in this document:** we originally
+described the residual Tranco signal as "structurally unavoidable, since
+only legitimate URLs can ever have a rank." That's wrong, and the mistake
+is itself a finding. Phishing hosted on free platforms (vercel.app,
+pages.dev, blogspot.com, weebly.com, github.io) inherits the *platform's*
+rank: 765 of 1,144 phishing URLs (67%) carry a Tranco rank, and among URLs
+ranked in the top 1,000, 66% are phishing (vs. 29% overall). See
+`src/training/model_diagnostics.py` for the reproducible numbers.
 
 **This whole debugging arc is genuinely strong material for your CP report's
 methodology section** — it demonstrates real ML engineering judgment, not
@@ -111,23 +121,94 @@ just a model that happened to work.
 
 ---
 
-## Current best result
+## Current best result (final pipeline, with adversarial augmentation)
 
-- **Model**: XGBoost (winner across most runs)
-- **Test F1**: ~0.94–0.97 (varies by dataset draw; ablated/conservative
-  estimate ~0.944)
-- **Test ROC-AUC**: ~0.996–0.999
+- **Model**: XGBoost
+- **Validation F1**: 0.988 (Random Forest 0.982, Decision Tree 0.956,
+  Logistic Regression 0.942) — margin over Random Forest is thin: 3 missed
+  phishing URLs vs. 5, out of 172
+- **Test F1**: 0.964 (precision 98.8%, recall 94.2%, accuracy 98.0%,
+  ROC-AUC 0.997) — scored once, after model selection
+- **Honest-evaluation check**: domain-grouped 5-fold CV gives F1 0.966–0.967
+  (vs. 0.987–0.988 for a random split), confirming the test score isn't
+  inflated by same-domain URLs leaking across the train/test boundary
 
-## What's next: Phase 3 — Explainability
+## Phase 3 — Explainability and robustness: done
 
-- Integrate SHAP for per-prediction feature attribution
-- Global feature importance analysis vs. domain-expert intuition
-- (Later) calibration checking, deep learning baseline comparison,
-  stacking ensemble, MLOps automation, frontend polish
+- **SHAP** (`src/training/explain_model.py`): per-prediction feature
+  attribution via `TreeExplainer`. Top global features: `path_length`
+  (1.83), `hostname_length` (1.37), `num_internal_links` (1.20).
+- **Calibration** (`src/training/calibration_check.py`): Brier score
+  0.0136 — the model's stated confidence is trustworthy on data like the
+  test set.
+- **Adversarial robustness** (`src/training/adversarial_check.py` +
+  `augment_adversarial_examples.py`): path-stripping evasion found at
+  100% on correctly-caught phishing URLs, fixed via adversarial training
+  (root-stripped copies added to the training set only) — evasion rate
+  dropped to 0% with test F1 essentially unchanged (0.968 → 0.964).
+  Caveat: this check used ~10 URLs, so the percentage is coarse; a larger
+  evasion test set is on the roadmap.
+
+## A diagnosed live limitation: false positives on famous sites
+
+Live-testing the served model against well-known legitimate sites (via
+`test_known_legitimate_sites.py`) surfaced false positives — e.g.
+`https://www.youtube.com/` flagged at 95.1%. SHAP traced it to two
+compounding data biases, confirmed by intervention
+(`src/training/model_diagnostics.py`):
+
+1. **`www.` is counted as a subdomain.** Every legitimate bare-root URL in
+   the training data (1,412 of them) comes from Tranco with no leading
+   `www.`; bare-root-plus-a-subdomain appears only in phishing.
+2. **Platform-inflated popularity rank** (see the ablation correction
+   above) reinforces the same false signal for platform-hosted phishing.
+
+Removing only `www.` from the URL (changing nothing else) drops YouTube's
+phishing probability from 95.1% to 1.6%; five other sites tested the same
+way show the same pattern. **Status: diagnosed, not yet fixed** — the fix
+(ignore `www.` in subdomain/hostname features; treat hosting platforms as
+their own registered domains) is deferred until after current reporting
+milestones, since retraining now would change every reported number.
+
+## Phase 5 — Serving: ~40% done
+
+FastAPI app (`src/serving/app.py`) with two pages:
+- **`/demo`** — the checker. Live feature extraction, prediction, and a
+  SHAP explanation shown as diverging bars with the actual feature value
+  next to each one, a plain-English summary sentence, and a live-checks
+  strip (DNS/WHOIS/page-fetch/Tranco status) so a failed lookup is visible
+  rather than silently guessed around.
+- **`/analysis`** — Model Analysis (`src/serving/model_analysis.py` +
+  `src/serving/static/analysis.html`). Reads `model_comparison.json` and
+  `model_analysis_data.json` (produced by `export_model_analysis.py`,
+  which re-scores the four saved models and verifies the result matches
+  the saved comparison before writing anything): the F1 ranking table,
+  ROC/PR curves, confusion matrices for all four models, the robustness
+  table, SHAP importance by feature family, the calibration diagram, and
+  an "honest limitations" card summarizing the `www.`/rank findings above.
+
+No accounts or prediction history yet (that's the remaining Phase 5 work).
+
+## What's next
+
+1. Fix the two diagnosed biases (`www.` handling, hosting-platform
+   domains) and retrain all four models on the enlarged dataset (~600
+   more phishing URLs already collected, not yet processed)
+2. Re-run `export_model_analysis.py` and the calibration/SHAP scripts so
+   the web app's numbers refresh automatically
+3. Broaden the model comparison (LightGBM, SVM) under the same protocol
+4. Stacking ensemble; character-level deep-learning baseline
+5. Schema-based drift detection (KS-test), a `tests/` folder
+6. MLflow registry, scheduled retraining, drift alerts
+7. Accounts and prediction history
 
 ## Repository
 
-Private GitHub repo, actively committed with descriptive messages at each
-meaningful milestone (environment setup, each bug fix, each ablation).
+GitHub repo (`Akshat426/Phising-Detection-Application`), actively
+committed with descriptive messages at each meaningful milestone
+(environment setup, each bug fix, each ablation, each robustness check).
 `.env`, raw/processed data, and model artifacts (`.pkl`) are git-ignored;
-code and experiment-report JSON files are tracked.
+code and experiment-report JSON files are tracked. **Note:** since
+`data/processed/` and `*.pkl` are gitignored, a fresh clone cannot run the
+app or reproduce reported numbers without first running the full pipeline
+(see README's "Running the data pipeline" and "Training and evaluation").

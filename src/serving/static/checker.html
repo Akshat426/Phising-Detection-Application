@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phishing URL Detector</title>
+<link rel="stylesheet" href="/static/shared.css">
+<style>
+.row{display:flex;gap:10px}input{flex:1;padding:14px 16px;border-radius:12px;border:2px solid var(--line);font-size:15px;outline:none}input:focus{border-color:var(--accent)}
+button.go{padding:0 26px;border:0;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:700;cursor:pointer}button.go:disabled{opacity:.5}
+.chips{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:12px;align-items:center;font-size:12px;color:var(--muted)}
+.chip{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--text);font-family:var(--mono)}
+.chip:hover{border-color:var(--accent)}.chip.g{border-color:#bbf7d0}.chip.r{border-color:#fecaca}.chip.w{border-color:#fde68a}
+.strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.verdict{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;border-radius:14px;border:2px solid}
+.verdict.phishing{background:var(--danger-soft);border-color:var(--danger)}.verdict.legitimate{background:var(--safe-soft);border-color:var(--safe)}
+.verdict h2{font-size:24px;margin:0}.verdict.phishing h2{color:var(--danger)}.verdict.legitimate h2{color:var(--safe)}
+.big{font-size:38px;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;line-height:1}.big small{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-top:4px}
+.gauge{position:relative;height:8px;border-radius:99px;background:linear-gradient(90deg,#86efac,#fde68a 50%,#fca5a5);margin:16px 2px 4px}
+.gauge i{position:absolute;top:-5px;width:4px;height:18px;border-radius:3px;background:var(--ink);transform:translateX(-2px)}
+.gauge-l{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.summary{font-size:15px;margin:18px 0 6px}.axis{display:grid;grid-template-columns:44% 1fr;font-size:11.5px;color:var(--muted);margin:16px 0 2px}
+.axis div:last-child{display:flex;justify-content:space-between}
+.f{display:grid;grid-template-columns:44% 1fr;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9}
+.f .n{font-size:14px;font-weight:600;color:var(--ink);cursor:help}.f .v{font-size:12.5px;color:var(--muted)}
+.bar{position:relative;height:22px}.bar:before{content:"";position:absolute;left:50%;top:0;bottom:0;border-left:1px solid #cbd5e1}
+.bar i{position:absolute;top:3px;height:16px;border-radius:4px;transition:width .5s}.bar i.p{left:50%;background:var(--danger)}.bar i.l{right:50%;background:var(--safe)}
+.bar span{position:absolute;top:2px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:600;margin-top:12px}
+.warn{background:var(--warn-soft);border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:10px 14px;font-size:13px;margin-top:12px}
+.err{background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:12px 16px;font-size:14px}
+#res{display:none;margin-top:22px}
+</style></head><body><div class="wrap">
+<nav><a href="/demo" class="on">Check a URL</a><a href="/analysis">Model Analysis</a><span class="brand">ML Capstone &middot; Mid-Sem</span></nav>
+<div class="card">
+ <p class="eyebrow">Live detector</p><h1>Phishing URL Detector</h1>
+ <p class="sub">Paste a URL. Features are computed live (URL text, DNS/WHOIS, the fetched page), scored by the selected model, and explained with SHAP.</p>
+ <div class="row"><input id="u" placeholder="https://example.com" autocomplete="off"><button class="go" id="b">Check</button></div>
+ <div class="chips" id="chips"></div>
+ <div class="strip" id="status"></div>
+ <div id="res"></div>
+</div></div>
+<script src="/static/features.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const EX=[['g','Legitimate',['https://github.com/','https://stackoverflow.com/','https://youtube.com/','https://amazon.com/']],
+ ['r','Phishing (feed)',['http://start-ledgerus.readme.io/','https://netflix.coxilab.de/','https://www.roblox.com.hr/users/5673817528/profile']],
+ ['w','Known limitation: "www."',['https://www.youtube.com/']]];
+$('chips').innerHTML=EX.map(([c,l,us])=>`<span>${l}:</span>`+us.map(u=>`<button class="chip ${c}" data-u="${u}">${u.replace(/^https?:\/\//,'').replace(/\/$/,'')}</button>`).join('')).join('<span style="width:8px"></span>');
+$('chips').onclick=e=>{if(e.target.dataset.u){$('u').value=e.target.dataset.u;check();}};
+const pill=(t,c='')=>`<span class="pill ${c}">${t}</span>`;
+fetch('/').then(r=>r.json()).then(h=>{const f=h.model_metrics?' &middot; test F1 '+h.model_metrics.f1.toFixed(3):'';
+ $('status').innerHTML=pill('Model: '+(h.model_type==='XGBClassifier'?'XGBoost':h.model_type)+f,'info')+pill('Tranco list '+(h.tranco_loaded?'loaded':'NOT loaded &ndash; results will be biased'),h.tranco_loaded?'ok':'bad');}).catch(()=>{$('status').innerHTML=pill('Server not reachable','bad')});
+function row(c,max){
+ const i=featInfo(c.feature),w=Math.min(48,Math.abs(c.shap_value)/max*48),p=c.shap_value>0;
+ return `<div class="f"><div><div class="n" data-tip="${i.desc.replace(/"/g,'&quot;')}">${i.label}</div><div class="v"><span class="mono">${c.feature}</span> = ${fmtValue(c.feature,c.value,c.missing)}</div></div>
+ <div class="bar"><i class="${p?'p':'l'}" style="width:${w}%"></i><span style="${p?'left:calc(50% + '+(w+1)+'%)':'right:calc(50% + '+(w+1)+'%)'};color:${p?'var(--danger)':'var(--safe)'}">${(p?'+':'')+c.shap_value.toFixed(2)}</span></div></div>`;}
+function phrase(c){const n=c.feature;if(n.endsWith('_was_missing'))return (c.value?'missing ':'available ')+featInfo(n.slice(0,-12)).label.toLowerCase();return featInfo(n).label.toLowerCase();}
+function summarise(d){
+ const ph=d.phishing_probability>=.5,pick=s=>d.all_contributions.filter(c=>s?c.shap_value>0:c.shap_value<0).slice(0,3).map(c=>'<b>'+phrase(c)+'</b>');
+ const j=a=>a.length>1?a.slice(0,-1).join(', ')+' and '+a.slice(-1):a[0]||'';
+ return ph?`Flagged mainly because of ${j(pick(1))}.`+(pick(0).length?` Working the other way: ${j(pick(0).slice(0,2))}.`:''):`Judged legitimate mainly because of ${j(pick(0))}.`+(pick(1).length?` Still nudging toward phishing: ${j(pick(1).slice(0,2))}.`:'');}
+async function check(){
+ const url=$('u').value.trim(); if(!url)return; $('b').disabled=true; $('b').textContent='Checking…';
+ const res=$('res'); res.style.display='block'; res.innerHTML='<p class="sub">Fetching page, DNS and WHOIS&hellip; this can take a few seconds.</p>';
+ try{
+  const r=await fetch('/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})}),d=await r.json();
+  if(!r.ok){res.innerHTML=`<div class="err">${d.detail||'Something went wrong.'}</div>`;return;}
+  const ph=d.prediction==='phishing',pct=d.phishing_probability*100,k=d.checks,max=Math.max(...d.all_contributions.map(c=>Math.abs(c.shap_value)));
+  res.innerHTML=`<div class="verdict ${d.prediction}"><div><h2>${ph?'&#9888;&#65039; Likely Phishing':'&#9989; Looks Legitimate'}</h2><div class="mono" style="margin-top:6px">${d.url}</div></div><div class="big">${pct.toFixed(1)}%<small>phishing probability</small></div></div>
+  <div class="gauge"><i style="left:${pct}%"></i></div><div class="gauge-l"><span>0% legitimate</span><span>50% decision threshold</span><span>100% phishing</span></div>
+  <p class="summary">${summarise(d)}</p>
+  <div class="strip">${pill('DNS '+(k.dns_resolves?'resolves':'failed'),k.dns_resolves?'ok':'bad')}${pill('WHOIS '+(k.whois_ok?'ok':'failed'),k.whois_ok?'ok':'bad')}${pill('Page fetch '+(k.page_fetch_ok?'HTTP '+k.http_status:'failed'),k.page_fetch_ok?'ok':'bad')}${pill(k.tranco_rank?'Tranco rank #'+Math.round(k.tranco_rank).toLocaleString():'Not in Tranco top 1M',k.tranco_rank?'ok':'')}</div>
+  <div class="axis"><div></div><div><span>&larr; toward legitimate</span><span>toward phishing &rarr;</span></div></div>
+  ${d.top_contributing_features.map(c=>row(c,max)).join('')}
+  <details><summary>Show all ${d.all_contributions.length} model inputs</summary>${d.all_contributions.map(c=>row(c,max)).join('')}</details>
+  ${(d.extraction_warnings||[]).map(w=>`<div class="warn">&#9888;&#65039; ${w}</div>`).join('')}
+  <p class="note">Bar length is SHAP push strength (log-odds), not percentage points, so bars do not add up to the probability. SHAP explains what the <i>model</i> relied on, not whether the site is truly malicious. Hover a feature name for its meaning.</p>`;
+ }catch(e){res.innerHTML='<div class="err">Could not reach the server. Is it still running?</div>';}
+ finally{$('b').disabled=false;$('b').textContent='Check';}
+}
+$('b').onclick=check;$('u').addEventListener('keydown',e=>{if(e.key==='Enter')check();});
+</script></body></html>
