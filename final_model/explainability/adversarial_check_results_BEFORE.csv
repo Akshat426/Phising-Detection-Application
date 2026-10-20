@@ -1,0 +1,16 @@
+url,strategy,perturbed_url,original_prob,new_prob,evaded
+https://www.facebookbonus.emmanueldegreatltd.com/,strip_path_only,https://www.facebookbonus.emmanueldegreatltd.com,0.9792668495202959,0.34161667940656104,True
+https://www.facebookbonus.emmanueldegreatltd.com/,combined_all_three,https://www.facebookbonus.emmanueldegreatltd.com,0.9792668495202959,0.34161667940656104,True
+http://donna.pt/wp-content/eaa,https_only,https://donna.pt/wp-content/eaa,0.6967652352869531,0.5419201055646784,False
+http://donna.pt/wp-content/eaa,strip_path_only,http://donna.pt,0.6967652352869531,0.2648304344217198,True
+http://donna.pt/wp-content/eaa,combined_all_three,https://donna.pt,0.6967652352869531,0.10482211565064782,True
+http://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com/,https_only,https://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com/,0.9953630462482321,0.9920356496931921,False
+http://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com/,strip_path_only,http://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com,0.9953630462482321,0.4271198305465737,True
+http://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com/,remove_brand_subdomain_only,http://www.ehay.item.com.thechennaistores.com/,0.9953630462482321,0.9964317898334583,False
+http://www.ehay.item.com.login.secures-wr8wcvzo.thechennaistores.com/,combined_all_three,https://www.ehay.item.com.thechennaistores.com,0.9953630462482321,0.34212262884848005,True
+http://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net/,https_only,https://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net/,0.9631524070589723,0.9485783436304493,False
+http://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net/,strip_path_only,http://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net,0.9631524070589723,0.44723744917556796,True
+http://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net/,combined_all_three,https://hexaboom-c8h2gjh9g7h7bqag.z02.azurefd.net,0.9631524070589723,0.39828079217996937,True
+http://www.instagrammalo.blogspot.com/,https_only,https://www.instagrammalo.blogspot.com/,0.9943040366629783,0.991671817369397,False
+http://www.instagrammalo.blogspot.com/,strip_path_only,http://www.instagrammalo.blogspot.com,0.9943040366629783,0.37240616305671453,True
+http://www.instagrammalo.blogspot.com/,combined_all_three,https://www.instagrammalo.blogspot.com,0.9943040366629783,0.3036744194350936,True

@@ -48,7 +48,34 @@ REQUEST_TIMEOUT = 6  # seconds - fail fast, don't hang the pipeline on one bad U
 # a network dependency + failure mode from a function that should be fast and
 # reliable. Run `python -m tldextract --update` manually if you ever want to
 # refresh the snapshot to a newer suffix list.
-_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
+#
+# include_psl_private_domains=True: diagnosed as a bias fix (see
+# docs/known-limitations or the project report, "rank bias" / "hosting
+# platforms"). The Public Suffix List's "private" section is contributed by
+# hosting providers specifically so that each customer's subdomain is treated
+# as its own registered domain - e.g. foo.vercel.app and bar.vercel.app are
+# unrelated sites, not two pages on one "vercel.app" site. Without this flag,
+# tldextract instead parsed "vercel.app" itself as domain+suffix (treating
+# ".app" as the effective TLD), which meant every phishing URL hosted on a
+# free platform inherited that platform's own Tranco popularity rank and
+# WHOIS registration age - a highly-ranked, old domain's data attributed to
+# a brand-new phishing subdomain that happens to live on it. Enabling this
+# flag fixes attribution for 17 of the hosting platforms this project has
+# observed phishing on (see KNOWN_PLATFORM_GAPS below for the rest, which
+# the bundled offline PSL snapshot does not yet cover).
+_TLD_EXTRACT = tldextract.TLDExtract(suffix_list_urls=(), include_psl_private_domains=True)
+
+# Hosting platforms confirmed (by direct testing - see
+# src/training/model_diagnostics.py) to NOT be in tldextract's bundled
+# offline Public Suffix List snapshot even with include_psl_private_domains
+# enabled above. For these specific platforms only, tldextract would still
+# incorrectly treat e.g. "foo.weebly.com" as domain="weebly" within the
+# "weebly.com" suffix, attributing weebly.com's own rank/WHOIS data to every
+# phishing site hosted there. Patched explicitly as a documented, narrow
+# fallback - NOT a general-purpose replacement for the PSL mechanism above.
+KNOWN_PLATFORM_GAPS = {
+    "weebly.com", "godaddysites.com", "edgeone.dev", "zapier.app", "readme.io",
+}
 
 IP_PATTERN = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
 SHORTENER_DOMAINS = {
@@ -144,6 +171,18 @@ class URLFeatureExtractor:
         extracted = _TLD_EXTRACT(url)
         registered_domain = f"{extracted.domain}.{extracted.suffix}" if extracted.suffix else extracted.domain
 
+        # Known-gap fallback (see KNOWN_PLATFORM_GAPS above): if tldextract's
+        # bundled PSL snapshot doesn't yet cover this specific hosting
+        # platform, and the URL does have a subdomain on it, treat that
+        # subdomain's leftmost label plus the platform as the effective
+        # registered domain - e.g. "foo.weebly.com" -> "foo.weebly.com", not
+        # just "weebly.com". This only affects which domain tranco_rank and
+        # WHOIS are looked up for (see _fill_domain); it does not change
+        # num_subdomains/hostname_length, which are a separate fix (below).
+        if registered_domain in KNOWN_PLATFORM_GAPS and extracted.subdomain:
+            first_label = extracted.subdomain.split(".")[0]
+            registered_domain = f"{first_label}.{registered_domain}"
+
         self._fill_lexical(feats, url, parsed, hostname, extracted)
 
         if self.fetch_whois:
@@ -159,7 +198,21 @@ class URLFeatureExtractor:
     # ------------------------------------------------------------------
     def _fill_lexical(self, feats: URLFeatures, url: str, parsed, hostname: str, extracted) -> None:
         feats.url_length = len(url)
-        feats.hostname_length = len(hostname)
+        # Diagnosed bias fix: a leading "www." was being counted as a real
+        # subdomain, and every legitimate bare-root URL in the training data
+        # (sourced from Tranco as plain names, e.g. "youtube.com") happened
+        # to never start with "www.", so "bare root + a subdomain" was a
+        # pattern that - by how the dataset was built, not by anything
+        # meaningful about phishing - appeared only in phishing examples.
+        # A real URL like https://www.youtube.com/ matched that pattern and
+        # was flagged at 95%+. We normalize by stripping exactly one leading
+        # "www" label before measuring hostname length or counting
+        # subdomains, so "www.youtube.com" and "youtube.com" are treated
+        # identically by these two features (all other lexical features,
+        # and has_ip_address/is_known_shortener/etc. below, intentionally
+        # keep using the raw, unmodified hostname).
+        normalized_hostname = _strip_leading_www(hostname)
+        feats.hostname_length = len(normalized_hostname)
         feats.path_length = len(parsed.path or "")
         feats.num_dots = url.count(".")
         feats.num_hyphens = url.count("-")
@@ -177,7 +230,8 @@ class URLFeatureExtractor:
         feats.is_known_shortener = int(hostname.lower() in SHORTENER_DOMAINS)
 
         subdomain = extracted.subdomain or ""
-        feats.num_subdomains = len([s for s in subdomain.split(".") if s]) if subdomain else 0
+        normalized_subdomain = _strip_leading_www_label(subdomain)
+        feats.num_subdomains = len([s for s in normalized_subdomain.split(".") if s]) if normalized_subdomain else 0
 
         # "//"" appearing after the initial protocol separator is a classic
         # redirect-obfuscation trick (e.g. http://real.com//http://evil.com)
@@ -312,6 +366,33 @@ class URLFeatureExtractor:
 # ----------------------------------------------------------------------
 # Small helpers
 # ----------------------------------------------------------------------
+def _strip_leading_www(hostname: str) -> str:
+    """Remove a single leading 'www.' prefix from a hostname, case-insensitive.
+
+    'www.youtube.com' -> 'youtube.com'; 'www2.example.com' is left alone
+    (only an exact 'www' label, matching the diagnosed pattern - not a
+    general-purpose "remove all www-like prefixes" normalizer).
+    """
+    if hostname.lower().startswith("www."):
+        return hostname[4:]
+    return hostname
+
+
+def _strip_leading_www_label(subdomain: str) -> str:
+    """Remove a leading 'www' label from a tldextract subdomain string.
+
+    tldextract's `.subdomain` for 'www.youtube.com' is 'www' -> stripped to
+    ''. For 'www.shop.example.com' it is 'www.shop' -> stripped to 'shop'.
+    For 'shop.www.example.com' it is 'shop.www' -> left unchanged, since
+    'www' is not the leading label there and this is not the diagnosed
+    pattern (which is specifically a leading "www.").
+    """
+    labels = subdomain.split(".") if subdomain else []
+    if labels and labels[0].lower() == "www":
+        labels = labels[1:]
+    return ".".join(labels)
+
+
 def _whois_with_retry(domain: str, max_retries: int = 2, base_delay: float = 0.75):
     """Attempt a WHOIS lookup with a couple of retries and exponential
     backoff before giving up.
