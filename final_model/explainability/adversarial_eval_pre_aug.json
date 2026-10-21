@@ -1,0 +1,73 @@
+{
+  "model": "final_model\\model_PRE_AUG.pkl",
+  "phishing": {
+    "https_only": {
+      "applicable": 135,
+      "flipped": 1,
+      "rate": 0.007407407407407408,
+      "ci95": [
+        0.0013087545613434844,
+        0.040765090741505236
+      ]
+    },
+    "strip_path_only": {
+      "applicable": 378,
+      "flipped": 183,
+      "rate": 0.48412698412698413,
+      "ci95": [
+        0.4341601406810798,
+        0.5344132153911764
+      ]
+    },
+    "remove_brand_subdomain_only": {
+      "applicable": 10,
+      "flipped": 0,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.2775401687666166
+      ]
+    },
+    "combined_all_three": {
+      "applicable": 378,
+      "flipped": 224,
+      "rate": 0.5925925925925926,
+      "ci95": [
+        0.5423681201033321,
+        0.6409539694751736
+      ]
+    }
+  },
+  "legitimate": {
+    "https_only": {
+      "applicable": 0,
+      "flipped": 0,
+      "rate": null,
+      "ci95": null
+    },
+    "strip_path_only": {
+      "applicable": 197,
+      "flipped": 0,
+      "rate": 0.0,
+      "ci95": [
+        1.734723475976807e-18,
+        0.01912751143189459
+      ]
+    },
+    "remove_brand_subdomain_only": {
+      "applicable": 0,
+      "flipped": 0,
+      "rate": null,
+      "ci95": null
+    },
+    "combined_all_three": {
+      "applicable": 197,
+      "flipped": 0,
+      "rate": 0.0,
+      "ci95": [
+        1.734723475976807e-18,
+        0.01912751143189459
+      ]
+    }
+  }
+}
