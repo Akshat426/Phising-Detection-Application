@@ -1,7 +1,15 @@
 """Six-model comparison on the held-out TEST set (scored once, no tuning here).
 
-Produces: metrics table, paired-bootstrap 95% CIs, McNemar tests vs. the best
-model, error-overlap analysis and a soft-voting preview (is stacking worthwhile?).
+Loads the exact fitted models from disk (no refitting):
+    final_model/all_models/{logistic_regression,decision_tree,random_forest,xgboost}.pkl
+        -> written by model_trainer.py
+    final_model/extra_models/{svm_rbf,hist_gb}.pkl  -> written by extra_models.py
+Each model's validation F1 is recomputed and checked against the JSON the training
+scripts saved, so a stale or mismatched file is caught instead of silently used.
+The "best" model is chosen on VALIDATION F1 (same rule as model_trainer.py).
+
+Produces: metrics table with paired-bootstrap 95% CIs, McNemar exact tests vs. the
+validation-best model, error-overlap analysis and a soft-voting preview.
 
 Place at: src/training/compare_models.py
 Run from project root:  python src\\training\\compare_models.py
@@ -17,26 +25,14 @@ import joblib
 import numpy as np
 import pandas as pd
 from scipy.stats import binomtest
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
-from sklearn.tree import DecisionTreeClassifier
 
 warnings.filterwarnings("ignore")
 SEED = 42
 N_BOOT = 2000
-
-# Best parameters printed by model_trainer.py on the augmented training set.
-REFIT = {
-    "logistic_regression": (LogisticRegression(C=3.338086111390218, penalty="l2",
-                            solver="liblinear", max_iter=2000, random_state=SEED), 0.9636),
-    "decision_tree": (DecisionTreeClassifier(criterion="gini", max_depth=11,
-                      min_samples_leaf=1, min_samples_split=9, random_state=SEED), 0.9566),
-    "random_forest": (RandomForestClassifier(max_depth=17, max_features="sqrt",
-                      min_samples_leaf=1, min_samples_split=8, n_estimators=108,
-                      random_state=SEED, n_jobs=-1), 0.9766),
-}
+FOUR = ["logistic_regression", "decision_tree", "random_forest", "xgboost"]
+TWO = ["svm_rbf", "hist_gb"]
 
 
 def load_any(path):
@@ -54,10 +50,10 @@ def unwrap(obj):
         for k in ("model", "classifier", "clf", "estimator"):
             if k in obj and hasattr(obj[k], "predict_proba"):
                 return obj[k]
-    raise TypeError(f"Cannot find a model with predict_proba in {type(obj)}")
+    raise TypeError(f"No model with predict_proba found in {type(obj)}")
 
 
-def m(y, p):
+def metr(y, p):
     pred = (p >= 0.5).astype(int)
     return dict(accuracy=accuracy_score(y, pred), precision=precision_score(y, pred),
                 recall=recall_score(y, pred), f1=f1_score(y, pred),
@@ -65,103 +61,99 @@ def m(y, p):
 
 
 def main(root: Path):
-    proc = root / "data" / "processed"
-    fm = root / "final_model"
-    tr = pd.read_csv(proc / "train_transformed.csv")
+    proc, fm = root / "data" / "processed", root / "final_model"
     va = pd.read_csv(proc / "validation_transformed.csv")
     te = pd.read_csv(proc / "test_transformed.csv")
-    cols = [c for c in tr.columns if c != "label"]
-    arr = lambda d: np.ascontiguousarray(d[cols].to_numpy(dtype=np.float64))
-    Xtr, ytr = arr(tr), tr["label"].to_numpy()
-    Xva, yva = arr(va), va["label"].to_numpy()
-    Xte, yte = arr(te), te["label"].to_numpy()
+    cols = [c for c in va.columns if c != "label"]
+    yva, yte = va["label"].to_numpy(), te["label"].to_numpy()
+    frames = {"val": va[cols], "test": te[cols]}
+    arrays = {k: np.ascontiguousarray(v.to_numpy(dtype=np.float64)) for k, v in frames.items()}
 
-    probs = {}
+    expected = {n: v["f1"] for n, v in
+                json.loads((fm / "model_comparison.json").read_text())["validation_results"].items()}
+    expected.update({n: v["validation"]["f1"] for n, v in
+                     json.loads((fm / "extra_models_results.json").read_text()).items()})
 
-    # 1) refit the three original models that were not saved as files
-    for name, (est, expected) in REFIT.items():
-        est.fit(Xtr, ytr)
-        vf1 = f1_score(yva, est.predict(Xva))
-        flag = "OK" if abs(vf1 - expected) < 0.002 else "WARNING: differs from trainer output"
-        print(f"{name:22s} refit val F1 {vf1:.4f} (trainer reported {expected:.4f})  {flag}")
-        probs[name] = est.predict_proba(Xte)[:, 1]
+    paths = {n: fm / "all_models" / f"{n}.pkl" for n in FOUR}
+    paths.update({n: fm / "extra_models" / f"{n}.pkl" for n in TWO})
+    use_frames = set(FOUR)  # these were trained on DataFrames; the extras on arrays
 
-    # 2) saved models
-    for name, path in [("svm_rbf", fm / "extra_models" / "svm_rbf.pkl"),
-                       ("hist_gb", fm / "extra_models" / "hist_gb.pkl")]:
-        est = unwrap(load_any(path))
-        probs[name] = est.predict_proba(Xte)[:, 1]
-        print(f"{name:22s} loaded from {path.name}; val F1 "
-              f"{f1_score(yva, est.predict(Xva)):.4f}")
+    probs_v, probs_t = {}, {}
+    print("Model                  val F1 (recomputed)  saved val F1   check")
+    for n, path in paths.items():
+        if not path.exists():
+            raise FileNotFoundError(f"{path} missing - re-run model_trainer.py / extra_models.py")
+        mdl = unwrap(load_any(path))
+        src = frames if n in use_frames else arrays
+        try:
+            pv, pt = mdl.predict_proba(src["val"])[:, 1], mdl.predict_proba(src["test"])[:, 1]
+        except Exception:
+            other = arrays if src is frames else frames
+            pv, pt = mdl.predict_proba(other["val"])[:, 1], mdl.predict_proba(other["test"])[:, 1]
+        probs_v[n], probs_t[n] = pv, pt
+        vf1 = f1_score(yva, (pv >= 0.5).astype(int))
+        ok = abs(vf1 - expected[n]) < 1e-4
+        print(f"{n:22s} {vf1:.4f}               {expected[n]:.4f}         "
+              f"{'OK' if ok else 'MISMATCH - files are from different runs!'}")
 
-    xgb = unwrap(load_any(fm / "model.pkl"))
-    try:
-        p = xgb.predict_proba(te[cols])[:, 1]
-        pv = xgb.predict(va[cols])
-    except Exception:
-        p = xgb.predict_proba(Xte)[:, 1]
-        pv = xgb.predict(Xva)
-    probs["xgboost"] = p
-    print(f"{'xgboost':22s} loaded from model.pkl; val F1 {f1_score(yva, pv):.4f}")
+    val_f1 = {n: f1_score(yva, (probs_v[n] >= 0.5).astype(int)) for n in paths}
+    order = sorted(paths, key=lambda n: -val_f1[n])
+    best = order[0]
+    print(f"\nValidation-best model among the six: {best} (val F1 {val_f1[best]:.4f})")
 
-    order = ["xgboost", "hist_gb", "random_forest", "logistic_regression",
-             "svm_rbf", "decision_tree"]
-
-    # ---- metrics + paired bootstrap CIs (same resamples for every model)
     rng = np.random.default_rng(SEED)
     idx = rng.integers(0, len(yte), size=(N_BOOT, len(yte)))
     rows, ci = [], {}
     for n in order:
-        met = m(yte, probs[n])
-        f1s = np.array([f1_score(yte[i], (probs[n][i] >= 0.5).astype(int)) for i in idx])
-        aucs = np.array([roc_auc_score(yte[i], probs[n][i]) for i in idx])
+        met = metr(yte, probs_t[n])
+        f1s = np.array([f1_score(yte[i], (probs_t[n][i] >= 0.5).astype(int)) for i in idx])
+        aucs = np.array([roc_auc_score(yte[i], probs_t[n][i]) for i in idx])
         ci[n] = {"f1": [float(np.percentile(f1s, 2.5)), float(np.percentile(f1s, 97.5))],
                  "auc": [float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))]}
-        rows.append({"model": n, **{k: round(v, 4) for k, v in met.items()},
+        rows.append({"model": n, "val_f1": round(val_f1[n], 4),
+                     **{k: round(v, 4) for k, v in met.items()},
                      "f1_ci95": f"[{ci[n]['f1'][0]:.4f}, {ci[n]['f1'][1]:.4f}]",
                      "auc_ci95": f"[{ci[n]['auc'][0]:.4f}, {ci[n]['auc'][1]:.4f}]"})
     table = pd.DataFrame(rows)
-    print("\n=== TEST SET RESULTS (n=%d), 95%% paired-bootstrap CIs, %d resamples ===" % (len(yte), N_BOOT))
+    print(f"\n=== TEST SET RESULTS (n={len(yte)}), 95% paired-bootstrap CIs, {N_BOOT} resamples ===")
     print(table.to_string(index=False))
 
-    # ---- McNemar (exact) vs xgboost
-    wrong = {n: ((probs[n] >= 0.5).astype(int) != yte) for n in order}
-    print("\n=== McNemar exact test: each model vs xgboost (errors only) ===")
+    wrong = {n: ((probs_t[n] >= 0.5).astype(int) != yte) for n in order}
+    print(f"\n=== McNemar exact test: each model vs {best} (discordant test URLs) ===")
     mc = {}
     for n in order[1:]:
-        b = int(np.sum(wrong["xgboost"] & ~wrong[n]))   # xgb wrong, other right
-        c = int(np.sum(~wrong["xgboost"] & wrong[n]))   # xgb right, other wrong
+        b = int(np.sum(wrong[best] & ~wrong[n]))
+        c = int(np.sum(~wrong[best] & wrong[n]))
         pval = 1.0 if b + c == 0 else float(binomtest(b, b + c, 0.5).pvalue)
-        mc[n] = {"xgb_only_wrong": b, "other_only_wrong": c, "p_value": pval}
-        print(f"  {n:22s} xgb-only-wrong={b:3d}  other-only-wrong={c:3d}  p={pval:.4f}")
+        mc[n] = {"best_only_wrong": b, "other_only_wrong": c, "p_value": pval}
+        print(f"  {n:22s} {best}-only-wrong={b:3d}  other-only-wrong={c:3d}  p={pval:.4f}")
+    print(f"  (Bonferroni threshold for {len(order)-1} comparisons: {0.05/(len(order)-1):.4f})")
 
-    # ---- error overlap
     print("\n=== ERROR OVERLAP (test set) ===")
     for n in order:
         print(f"  {n:22s} errors: {int(wrong[n].sum())}")
-    print("  Pairwise Jaccard of error sets (1.0 = identical mistakes):")
-    for a, b in combinations(order[:4], 2):
+    top4 = order[:4]
+    print("  Pairwise Jaccard of error sets among the top four (1.0 = identical mistakes):")
+    for a, b in combinations(top4, 2):
         u = np.sum(wrong[a] | wrong[b])
-        j = np.sum(wrong[a] & wrong[b]) / u if u else 1.0
-        print(f"    {a} vs {b}: {j:.2f}")
-    others = np.any([wrong[n] for n in order[1:4]], axis=0)
-    fixable = int(np.sum(wrong["xgboost"] & ~np.all([wrong[n] for n in order[1:4]], axis=0)))
-    print(f"  xgboost errors: {int(wrong['xgboost'].sum())}; at least one of the next "
-          f"three models gets {fixable} of them right")
+        print(f"    {a} vs {b}: {(np.sum(wrong[a] & wrong[b]) / u) if u else 1.0:.2f}")
+    nxt = order[1:4]
+    fixable = int(np.sum(wrong[best] & ~np.all([wrong[n] for n in nxt], axis=0)))
+    print(f"  {best} errors: {int(wrong[best].sum())}; at least one of {nxt} gets {fixable} of them right")
 
-    # ---- soft-vote preview
-    vote = np.mean([probs[n] for n in order[:3]], axis=0)
-    vm = m(yte, vote)
-    print("\n=== SOFT-VOTE PREVIEW (mean of xgboost + hist_gb + random_forest) ===")
+    top3 = order[:3]
+    vote = np.mean([probs_t[n] for n in top3], axis=0)
+    vm = metr(yte, vote)
+    print(f"\n=== SOFT-VOTE PREVIEW (mean probability of {', '.join(top3)}) ===")
     print("  " + ", ".join(f"{k} {v:.4f}" for k, v in vm.items()))
-    print(f"  errors: {int(((vote >= 0.5).astype(int) != yte).sum())} "
-          f"(best single model: {int(wrong['xgboost'].sum())})")
+    print(f"  errors: {int(((vote >= 0.5).astype(int) != yte).sum())} (best single model: {int(wrong[best].sum())})")
 
-    out = {"metrics": rows, "ci95": ci, "mcnemar_vs_xgboost": mc,
-           "soft_vote": vm, "n_test": int(len(yte))}
+    out = {"selected_on_validation": best, "validation_f1": val_f1, "metrics": rows,
+           "ci95": ci, "mcnemar_vs_best": mc, "soft_vote_top3": {"models": top3, **vm},
+           "n_test": int(len(yte))}
     (fm / "six_model_comparison.json").write_text(json.dumps(out, indent=2, default=float))
     table.to_csv(fm / "six_model_comparison.csv", index=False)
-    pd.DataFrame({"y_true": yte, **{n: probs[n] for n in order}}).to_csv(
+    pd.DataFrame({"y_true": yte, **{n: probs_t[n] for n in order}}).to_csv(
         fm / "test_probabilities_all_models.csv", index=False)
     print(f"\nSaved -> {fm / 'six_model_comparison.json'} (+ .csv, test_probabilities_all_models.csv)")
 

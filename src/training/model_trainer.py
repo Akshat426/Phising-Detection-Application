@@ -260,6 +260,15 @@ def main():
     report_path = MODELS_DIR / f"model_comparison{suffix}.json"
     joblib.dump(best_model, model_path)
 
+    # Save ALL four fitted models (not just the winner) so downstream scripts -
+    # compare_models.py, significance tests - evaluate the exact models that were
+    # selected on validation instead of refitting them from printed parameters.
+    all_models_dir = MODELS_DIR / f"all_models{suffix}"
+    all_models_dir.mkdir(parents=True, exist_ok=True)
+    for model_name, fitted in fitted_models.items():
+        joblib.dump(fitted, all_models_dir / f"{model_name}.pkl")
+    print(f"Saved all {len(fitted_models)} fitted models -> {all_models_dir}")
+
     comparison_report = {
         "excluded_features": exclude_features,
         "validation_results": val_results,
