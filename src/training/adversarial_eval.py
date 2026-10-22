@@ -6,7 +6,8 @@ URL-string tricks as adversarial_check.py (via features.url_perturbations) to
   * legitimate test URLs the model correctly clears -> "false-flag rate" (control)
 and reports counts with Wilson 95% confidence intervals.
 
-All URLs come from test.csv (never used in training).
+All URLs come from test.csv by default (or validation.csv with --split validation);
+neither is ever used in training.
 
 Place at: src/training/adversarial_eval.py
 Examples (project root):
@@ -22,6 +23,7 @@ import json
 import sys
 from math import sqrt
 from pathlib import Path
+from urllib.parse import urlparse
 
 import joblib
 import numpy as np
@@ -31,6 +33,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from features.feature_extractor import URLFeatureExtractor  # noqa: E402
 from features.transformation import DataTransformer  # noqa: E402
 from features.url_perturbations import STRATEGIES, LEXICAL_FEATURES  # noqa: E402
+
+def add_trailing_slash(url):
+    """site.com -> site.com/ : a pure formatting change (no new information).
+    Applies only to bare roots with no slash, i.e. the format all legitimate
+    roots in the training data share."""
+    p = urlparse(url)
+    return url + "/" if p.path == "" and not p.query and not p.fragment else url
+
+
+ALL_STRATEGIES = dict(STRATEGIES)
+ALL_STRATEGIES["add_trailing_slash"] = add_trailing_slash
 
 ROOT = Path(__file__).resolve().parents[2]
 PROCESSED = ROOT / "data" / "processed"
@@ -67,7 +80,7 @@ def evaluate(rows, true_label, model, transformer, extractor, n_max, seed, name)
         print(f"[{name}] random sample of {n_max} used")
 
     summary, per_url = {}, []
-    for sname, fn in STRATEGIES.items():
+    for sname, fn in ALL_STRATEGIES.items():
         pert = ok["url"].map(fn)
         app = (pert != ok["url"]).to_numpy()
         n_app = int(app.sum())
@@ -98,6 +111,9 @@ def main():
     ap.add_argument("--artifacts-dir", type=Path, default=PROCESSED / "transform_artifacts")
     ap.add_argument("--n-examples", type=int, default=0,
                     help="max URLs per class (0 = use all correctly-classified)")
+    ap.add_argument("--split", choices=["test", "validation"], default="test",
+                    help="which held-out split to attack (use validation to choose "
+                         "between variants, test only for final reporting)")
     ap.add_argument("--tag", type=str, default="post_aug")
     ap.add_argument("--seed", type=int, default=42)
     a = ap.parse_args()
@@ -107,7 +123,8 @@ def main():
     transformer = DataTransformer.load(a.artifacts_dir)
     extractor = URLFeatureExtractor(fetch_content=False, fetch_whois=False)
 
-    test = pd.read_csv(PROCESSED / "test.csv")
+    test = pd.read_csv(PROCESSED / ("test.csv" if a.split == "test" else "validation.csv"))
+    print(f"Split attacked: {a.split}")
     phish = test[test["label"] == 1]
     legit = test[test["label"] == 0]
 
@@ -131,10 +148,10 @@ def main():
 
     out = FINAL / "explainability"
     out.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(urls_p + urls_l).to_csv(out / f"adversarial_eval_{a.tag}_urls.csv", index=False)
-    (out / f"adversarial_eval_{a.tag}.json").write_text(json.dumps(
+    pd.DataFrame(urls_p + urls_l).to_csv(out / f"adversarial_eval_{a.tag}_{a.split}_urls.csv", index=False)
+    (out / f"adversarial_eval_{a.tag}_{a.split}.json").write_text(json.dumps(
         {"model": str(a.model_path), "phishing": res_p, "legitimate": res_l}, indent=2))
-    print(f"\nSaved -> {out / f'adversarial_eval_{a.tag}.json'} (+ _urls.csv)")
+    print(f"\nSaved -> {out / f'adversarial_eval_{a.tag}_{a.split}.json'} (+ _urls.csv)")
 
 
 if __name__ == "__main__":

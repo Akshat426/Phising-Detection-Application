@@ -165,6 +165,7 @@ class URLFeatureExtractor:
     # Public entrypoint
     # ------------------------------------------------------------------
     def extract(self, url: str) -> URLFeatures:
+        url = canonicalize_url(url)  # see canonicalize_url: removes the bare-root trailing-slash leak
         feats = URLFeatures()
         parsed = urlparse(url if "://" in url else f"http://{url}")
         hostname = parsed.hostname or ""
@@ -366,6 +367,32 @@ class URLFeatureExtractor:
 # ----------------------------------------------------------------------
 # Small helpers
 # ----------------------------------------------------------------------
+def canonicalize_url(url: str) -> str:
+    """Remove the trailing slash from a bare-root URL, and nothing else.
+
+    'http://site.com/' -> 'http://site.com'. URLs with a real path, a query or
+    a fragment are returned unchanged.
+
+    Diagnosed formatting leak: in the training data every bare-root PHISHING
+    URL (from OpenPhish) was written WITH a trailing slash (974 of 974) and
+    every bare-root LEGITIMATE URL (built from Tranco names) WITHOUT one
+    (974 of 974). A tree model could read class off path_length /
+    num_slashes / url_length without learning anything about phishing: adding
+    only a "/" made 17.7% of legitimate roots look phishing, and removing it
+    let 1 in 3 phishing roots evade. 'site.com' and 'site.com/' are the same
+    resource, so we normalise them before any feature is computed - the same
+    treatment as the leading-"www." fix. This function is also applied at
+    serving time (it lives inside extract()), so training and the live app
+    can never disagree about URL form.
+    """
+    if not url.endswith("/"):
+        return url
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    if parsed.path == "/" and not parsed.params and not parsed.query and not parsed.fragment:
+        return url[:-1]
+    return url
+
+
 def _strip_leading_www(hostname: str) -> str:
     """Remove a single leading 'www.' prefix from a hostname, case-insensitive.
 

@@ -1,5 +1,5 @@
 {
-  "model": "D:\\SEM - 5\\ML CP (Submission)\\phishing-cp\\final_model\\model.pkl",
+  "model": "final_model\\model_PRE_AUG.pkl",
   "phishing": {
     "https_only": {
       "applicable": 135,
@@ -12,11 +12,11 @@
     },
     "strip_path_only": {
       "applicable": 378,
-      "flipped": 4,
-      "rate": 0.010582010582010581,
+      "flipped": 183,
+      "rate": 0.48412698412698413,
       "ci95": [
-        0.0041225513851745575,
-        0.026889260842723084
+        0.4341601406810798,
+        0.5344132153911764
       ]
     },
     "remove_brand_subdomain_only": {
@@ -30,12 +30,18 @@
     },
     "combined_all_three": {
       "applicable": 378,
-      "flipped": 7,
-      "rate": 0.018518518518518517,
+      "flipped": 224,
+      "rate": 0.5925925925925926,
       "ci95": [
-        0.008998577739218883,
-        0.03772655645255069
+        0.5423681201033321,
+        0.6409539694751736
       ]
+    },
+    "add_trailing_slash": {
+      "applicable": 0,
+      "flipped": 0,
+      "rate": null,
+      "ci95": null
     }
   },
   "legitimate": {
@@ -47,11 +53,11 @@
     },
     "strip_path_only": {
       "applicable": 197,
-      "flipped": 7,
-      "rate": 0.03553299492385787,
+      "flipped": 0,
+      "rate": 0.0,
       "ci95": [
-        0.01731663739698491,
-        0.07151754834939432
+        1.734723475976807e-18,
+        0.01912751143189459
       ]
     },
     "remove_brand_subdomain_only": {
@@ -62,11 +68,20 @@
     },
     "combined_all_three": {
       "applicable": 197,
-      "flipped": 7,
-      "rate": 0.03553299492385787,
+      "flipped": 0,
+      "rate": 0.0,
       "ci95": [
-        0.01731663739698491,
-        0.07151754834939432
+        1.734723475976807e-18,
+        0.01912751143189459
+      ]
+    },
+    "add_trailing_slash": {
+      "applicable": 215,
+      "flipped": 38,
+      "rate": 0.17674418604651163,
+      "ci95": [
+        0.13156161456507529,
+        0.23327578380890843
       ]
     }
   }
