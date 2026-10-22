@@ -1,0 +1,44 @@
+{
+  "excluded_features": [
+    "tranco_rank",
+    "tranco_rank_was_missing"
+  ],
+  "validation_results": {
+    "logistic_regression": {
+      "accuracy": 0.919496855345912,
+      "precision": 0.8869778869778869,
+      "recall": 0.9525065963060686,
+      "f1": 0.9185750636132316,
+      "roc_auc": 0.97542241729247
+    },
+    "decision_tree": {
+      "accuracy": 0.929559748427673,
+      "precision": 0.910941475826972,
+      "recall": 0.9445910290237467,
+      "f1": 0.927461139896373,
+      "roc_auc": 0.9565975745889994
+    },
+    "random_forest": {
+      "accuracy": 0.959748427672956,
+      "precision": 0.9483204134366925,
+      "recall": 0.9683377308707124,
+      "f1": 0.95822454308094,
+      "roc_auc": 0.9906129490562209
+    },
+    "xgboost": {
+      "accuracy": 0.959748427672956,
+      "precision": 0.9530026109660574,
+      "recall": 0.9630606860158312,
+      "f1": 0.958005249343832,
+      "roc_auc": 0.9911520702252892
+    }
+  },
+  "selected_model": "random_forest",
+  "test_metrics": {
+    "accuracy": 0.979874213836478,
+    "precision": 0.9665809768637532,
+    "recall": 0.9920844327176781,
+    "f1": 0.9791666666666666,
+    "roc_auc": 0.9967462451796225
+  }
+}
