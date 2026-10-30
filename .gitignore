@@ -22,3 +22,10 @@ mlflow.db
 .DS_Store
 .vscode/
 *.xlsx
+data/raw/openphish_raw.txt
+data/processed/transform_artifacts_*/
+data/processed/pre_canonicalization/
+final_model/explainability/*_urls.csv
+final_model_PREFIX/
+www. fixed/
+add-quatarly-models.ps1

@@ -55,7 +55,16 @@ def main():
     args = ap.parse_args()
 
     if not BASE_PATH.exists():
-        raise FileNotFoundError(f"{BASE_PATH} not found.")
+        # Fresh pipeline run: snapshot the freshly split, UNaugmented training set as the base.
+        train_path = PROCESSED_DIR / "train.csv"
+        if not train_path.exists():
+            raise FileNotFoundError(f"Neither {BASE_PATH} nor {train_path} found - run split_dataset.py first.")
+        fresh = pd.read_csv(train_path)
+        if fresh["source"].astype(str).str.contains("augmented|slash_variant").any():
+            raise RuntimeError("train.csv already contains augmented rows and no clean base exists. "
+                               "Re-run split_dataset.py (and canonicalize_dataset.py if needed) first.")
+        fresh.to_csv(BASE_PATH, index=False)
+        print(f"Created clean base snapshot -> {BASE_PATH}")
     base = pd.read_csv(BASE_PATH)
     if "url" not in base.columns:
         raise ValueError("base training file has no 'url' column.")

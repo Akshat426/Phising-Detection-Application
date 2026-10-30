@@ -1,155 +1,85 @@
-# Phishing URL Detection — ML Capstone
+# Phishing URL Detector — an audited ML pipeline
 
-Rebuilt from scratch, using a reference project as an architectural guide only.
-Every dataset, feature, and model here is built fresh for this project.
+URL-based phishing detection with **35 features** (20 lexical, 4 domain, 11 page-content) on **5,296 URLs**
+(2,526 phishing from OpenPhish, 2,770 legitimate from the Tranco list). Six classifiers are compared, and — the
+main point of the project — the pipeline is **audited for dataset artifacts** that inflate accuracy.
+A FastAPI app serves live predictions with SHAP explanations.
 
-## Why rebuild?
+> Paper: *Auditing a Phishing URL Detector: Finding and Removing Dataset Artifacts That Inflate Machine-Learning Accuracy* (IEEE conference format).
 
-The reference project this is based on had a real, fixable weakness: 5 of its
-30 features were hardcoded constants rather than actually computed per URL,
-and its dataset was the ~2015 UCI phishing dataset with several features
-(Alexa Rank, Google Index) that rely on services that no longer exist or are
-no longer freely queryable. This rebuild:
-- Computes every feature genuinely (see `src/features/feature_extractor.py`)
-- Uses current, real data: OpenPhish's live feed (PhishTank has had
-  new-registration disabled since ~2022) + Tranco (a maintained,
-  research-grade domain popularity ranking) instead of a decade-old static
-  dataset
+## Headline results (held-out test set, n = 795)
 
-## Status: mid-semester review complete, ~55% of the full plan
+| Model | Test F1 [95% CI] | McNemar p vs XGBoost |
+|---|---|---|
+| **XGBoost** (selected on validation) | **0.9831** [0.9736, 0.9914] | – |
+| Random Forest | 0.9805 [0.9706, 0.9896] | 0.73 (tied) |
+| HistGradientBoosting | 0.9805 [0.9702, 0.9895] | 0.73 (tied) |
+| Decision Tree | 0.9690 [0.9566, 0.9804] | 0.0034 |
+| SVM (RBF) | 0.9657 [0.9525, 0.9780] | 0.0044 |
+| Logistic Regression | 0.9595 [0.9451, 0.9725] | 0.0003 |
 
-- **Phase 1 (data + features): done.** 35 live-computed features, 3,914
-  processed URLs (2,770 legitimate / 1,144 phishing), ~600 more phishing
-  URLs already collected and awaiting processing.
-- **Phase 2 (model training): ~60% done.** Four models compared
-  (Logistic Regression, Decision Tree, Random Forest, XGBoost); XGBoost
-  selected (test F1 0.964). Stacking ensemble and a character-level deep
-  model are still pending.
-- **Phase 3 (explainability + robustness): done.** SHAP explanations,
-  calibration check (Brier 0.0136), adversarial evasion testing and fix.
-- **Phase 4 (MLOps): just started.** MLflow experiment tracking is in
-  place; scheduled retraining and drift alerts are not yet built.
-- **Phase 5 (serving): ~40% done.** A FastAPI backend with two web pages —
-  a URL checker with SHAP-based explanations, and a Model Analysis page
-  comparing all four models. No accounts or prediction history yet.
+XGBoost: precision 96.9 %, recall 99.7 %, AUC 0.9988, Brier 0.0126. Its 13 test errors are 12 false positives and 1 missed phishing URL.
+The first, leaky pipeline scored 0.9934; the lower number above is the honest one.
 
-**A known, diagnosed limitation:** live testing surfaced false positives on
-several well-known sites (e.g. `www.youtube.com`). Traced to two data
-biases — `www.` being counted as a subdomain, and popularity-rank
-inflation from phishing hosted on free platforms (vercel.app, pages.dev,
-etc.). Confirmed by intervention: removing only `www.` drops the YouTube
-false-positive from 95.1% to 1.6%. Full diagnosis and reproducible numbers
-in `src/training/model_diagnostics.py` and the project report. The fix
-(ignore `www.` in subdomain/hostname features; treat hosting platforms as
-their own registered domains) is planned but not yet applied — retraining
-now would change every reported number, so it's deferred to after
-reporting milestones.
+## What the audit found (and fixed)
 
-## Setup
+1. **Popularity-rank confound** – free-hosting platforms lent their Tranco rank and WHOIS age to phishing pages, and a leading `www.` was counted as a subdomain.
+2. **Trailing-slash leak** – every bare-root phishing URL ended in `/` and every bare-root legitimate URL did not (974 of 974 in each class).
+   On the unaugmented model, adding one `/` flipped 17.7 % of legitimate roots to "phishing" and stripping the path let 48.4 % of phishing URLs evade.
+   Fixed by **URL canonicalization** inside the feature extractor (`canonicalize_url`), shared by training and the live app.
+3. **Augmentation trade-off** – phishing-only root-stripping removes evasion but causes false alarms (7.5 % on validation); **symmetric** augmentation
+   (both classes) keeps evasion at 0.8 % [0.3, 2.3] on test with 0.5 % false flags.
 
-This project needs full internet access (OpenPhish, Tranco, live site
-fetches, WHOIS) — it will NOT work in a network-sandboxed environment.
+## Known limitations (read before trusting the numbers)
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Mac/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+- Legitimate URLs come from a ranked list, so the Tranco rank partly encodes the data source: with the rank blanked, 34.6 % of legitimate URLs are flagged.
+- Test prevalence is 47.7 % phishing. At 1 % prevalence the same error rates would give a precision of roughly 26 % (illustration, assumes the rates transfer).
+- Splits are random, not forward in time; 7 of 35 features drift across collection batches.
+- 795 test URLs ⇒ ±0.9 F1 points; XGBoost, Random Forest and HistGradientBoosting cannot be separated.
+- Evasion probes are cheap lexical string tricks, not adaptive attacks.
 
-cp .env.example .env
-# edit .env if you need to override any defaults (see .env.example for keys)
+## Repository layout
+
+```
+src/data_pipeline/   fetch_openphish.py, fetch_tranco.py, build_dataset.py, split_dataset.py, data_validation.py,
+                     canonicalize_dataset.py, augment_symmetric.py (+ older augment_adversarial_examples.py)
+src/features/        feature_extractor.py (incl. canonicalize_url), transformation.py, url_perturbations.py
+src/training/        model_trainer.py, extra_models.py, compare_models.py, adversarial_eval.py,
+                     explain_model.py, calibration_check.py, model_diagnostics.py, drift_and_latency.py
+src/serving/         app.py (FastAPI: /demo checker, /analysis page, POST /predict)
+tests/               test_url_canonicalization.py (14 tests)
+final_model/         saved metrics and reports (model files are not committed)
 ```
 
-## Running the data pipeline (in order)
+## Reproducing the results (PowerShell, project root, seed 42)
 
-```bash
-# 1. Fetch phishing URLs from the OpenPhish live feed (merges new URLs
-#    into data/raw/ without duplicating on repeat runs)
-python src/data_pipeline/fetch_openphish.py
-# or on Windows: run_fetch_openphish.bat
-
-# 2. Fetch legitimate URLs sampled across Tranco rank bands, crawling each
-#    domain's homepage for a real internal link (not just the bare root —
-#    see "the leakage story" in PROJECT_STATUS.md for why that matters)
-python src/data_pipeline/fetch_tranco.py --total 5000
-
-# 3. Extract features for every URL and build the labeled dataset
-#    Start small to make sure everything works before committing hours to it:
-python src/data_pipeline/build_dataset.py --sample 200
-
-# Once that looks good, run the full build (this takes a while — it's
-# making thousands of real network requests). Safe to Ctrl+C and re-run;
-# it resumes from a checkpoint automatically.
-python src/data_pipeline/build_dataset.py --workers 16
-
-# 4. Validate, split (70/15/15) and transform
-python src/data_pipeline/data_validation.py
-python src/data_pipeline/split_dataset.py
+```
+python src\data_pipeline\fetch_openphish.py
+python src\data_pipeline\fetch_tranco.py
+python src\data_pipeline\build_dataset.py --workers 16
+python src\data_pipeline\split_dataset.py
+python src\data_pipeline\data_validation.py
+python src\data_pipeline\augment_symmetric.py
+Copy-Item -Force data\processed\train_augmented_symmetric.csv data\processed\train.csv
+python src\features\transformation.py
+python src\training\model_trainer.py
+python src\training\extra_models.py --models svm_rbf hist_gb
+python src\training\compare_models.py
+python src\training\adversarial_eval.py --tag canon_symm --split test
+python src\training\explain_model.py
+python src\training\calibration_check.py
+python src\training\model_diagnostics.py
+python -m pytest tests -q
 ```
 
-## Training and evaluation
+Notes: features are extracted live (WHOIS, DNS, HTTP), so a rebuilt dataset will differ from the one in the paper. The trainer is deterministic on identical input.
+Re-running `transformation.py` overwrites `data/processed/transform_artifacts`; keep a copy per model variant.
+LightGBM crashed in the development environment (Windows access violation), so scikit-learn's HistGradientBoosting is used instead.
 
-```bash
-# Compare all 4 models, select the best by validation F1, score test once
-python src/training/model_trainer.py
+## Run the app
 
-# Explainability, calibration, and robustness
-python src/training/explain_model.py
-python src/training/calibration_check.py
-python src/training/adversarial_check.py
-
-# Curves and confusion matrices for the Model Analysis web page
-# (re-scores the saved models and verifies they match model_comparison.json
-# before writing anything)
-python src/training/export_model_analysis.py
-
-# Reproduces every diagnostic figure behind the known-limitation writeup
-# (platform-hosting bias, rank bias, the "www." finding, honest-eval check)
-python src/training/model_diagnostics.py
 ```
-
-## Running the web app
-
-```bash
 uvicorn src.serving.app:app --port 8000
 ```
-
-- `http://127.0.0.1:8000/demo` — the checker: paste a URL, get a verdict,
-  a probability gauge, a plain-English summary, and per-feature SHAP bars
-  with the actual value the model saw for each one.
-- `http://127.0.0.1:8000/analysis` — Model Analysis: the four-model
-  comparison, F1 ranking, ROC/PR curves, confusion matrices, calibration,
-  SHAP importance, and the honest-limitations writeup. Reads the JSON
-  files written by training, so it refreshes automatically on retrain
-  (curves/confusion matrices need `export_model_analysis.py` re-run by hand).
-- `http://127.0.0.1:8000/` — health check; also reports whether the
-  Tranco popularity list loaded (the model depends heavily on it — see
-  the known-limitation note above).
-
-## Project structure
-
-```
-data/
-  raw/            OpenPhish + Tranco URL lists (not committed — regenerate via scripts)
-  processed/      Final extracted-feature dataset, splits (not committed)
-final_model/      Saved model comparison reports, SHAP/calibration plots,
-                  diagnostics (model.pkl itself is gitignored — regenerate
-                  by running the training pipeline above)
-src/
-  features/       feature_extractor.py — the core, reusable feature computation logic
-  data_pipeline/  scripts that fetch URLs, validate, split and build the dataset
-  training/       model comparison, explainability, calibration, robustness,
-                  and the diagnostics behind the known-limitation writeup
-  serving/        FastAPI app, the Model Analysis router, and the two web pages
-tests/            unit tests for the feature extractor (still to add)
-```
-
-## A note on feature extraction reliability
-
-Every feature that requires a network call (WHOIS, live page fetch) is
-allowed to fail and produce a real missing value (`None`/`NaN`) rather than
-a fake default — with a matching `_was_missing` indicator column added
-before imputation, so "this lookup failed" is preserved as a signal rather
-than silently smoothed over. This is a deliberate design choice: some
-sites will be down, some WHOIS servers will rate-limit, and pretending
-that didn't happen would quietly corrupt the dataset.
+Open http://127.0.0.1:8000/demo (URL checker) and /analysis (model analysis page).
+The raw OpenPhish feed is not part of the repository; collect it with `fetch_openphish.py` under OpenPhish's terms.
