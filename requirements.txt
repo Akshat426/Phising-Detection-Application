@@ -20,5 +20,6 @@ shap==0.45.1
 # --- Phase 5: serving (added later) ---
 fastapi==0.111.0
 uvicorn==0.30.1
-pymongo==4.7.3
 pydantic==2.7.4
+joblib==1.6.0
+pytest==9.1.1
