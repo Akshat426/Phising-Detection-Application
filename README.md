@@ -30,11 +30,23 @@ The first, leaky pipeline scored 0.9934; the lower number above is the honest on
 3. **Augmentation trade-off** – phishing-only root-stripping removes evasion but causes false alarms (7.5 % on validation); **symmetric** augmentation
    (both classes) keeps evasion at 0.8 % [0.3, 2.3] on test with 0.5 % false flags.
 
+## Additional experiments
+
+- **Phishing-side forward-in-time test** (`forward_in_time.py`). Only phishing URLs carry fetch times (10-12 Sep, 22-23 Sep, 8-11 Oct 2026); the legitimate class is a single Tranco snapshot,
+  so this is *not* a full forward-in-time split. Trained on the earlier phishing batches (unaugmented base, final-model hyperparameters, 20 seeds) and compared with a
+  size-matched random control: on the October batch the earlier-trained model catches 99.7 % (n = 235) vs 99.5 % for the control (no measurable loss); with a mid-batch cutoff (22 Sep)
+  it catches 97.9 % vs 99.0 % (n = 329), a small but consistent gap. High recall partly reflects the model's reliance on the rank signal, so this does not show that novel attack styles are handled.
+- **Rank-free models** (`rank_free_comparison.py`; models trained with `tranco_rank` and `tranco_rank_was_missing` excluded). The rank-free Random Forest (selected on validation) has test F1 0.9792 vs 0.9831 for the full XGBoost;
+  paired exact McNemar p = 0.66 and a paired-bootstrap F1 difference of +0.004 [-0.008, +0.016], i.e. no *detectable* loss (not proof of equivalence). Rank-free Decision Tree and Logistic Regression are significantly worse.
+  False alarms on held-out legitimate URLs are about 4.0 % [2.8, 5.5] for the rank-free Random Forest, versus 34.6 % for the full model when the rank is unavailable at inference.
+  Removing the rank features removes the explicit dependence on the rank, not necessarily the source confound behind it.
+
 ## Known limitations (read before trusting the numbers)
 
 - Legitimate URLs come from a ranked list, so the Tranco rank partly encodes the data source: with the rank blanked, 34.6 % of legitimate URLs are flagged.
 - Test prevalence is 47.7 % phishing. At 1 % prevalence the same error rates would give a precision of roughly 26 % (illustration, assumes the rates transfer).
-- Splits are random, not forward in time; 7 of 35 features drift across collection batches.
+- The main splits are random. The phishing-side temporal test above shows no measurable loss on a later batch, but legitimate URLs have no timestamps, so there is no full forward-in-time evaluation; 7 of 35 features drift across collection batches.
+- No cross-dataset evaluation (PhreshPhish, PhiUSIIL) and no deep-learning baseline.
 - 795 test URLs ⇒ ±0.9 F1 points; XGBoost, Random Forest and HistGradientBoosting cannot be separated.
 - Evasion probes are cheap lexical string tricks, not adaptive attacks.
 
@@ -42,10 +54,12 @@ The first, leaky pipeline scored 0.9934; the lower number above is the honest on
 
 ```
 src/data_pipeline/   fetch_openphish.py, fetch_tranco.py, build_dataset.py, split_dataset.py, data_validation.py,
-                     canonicalize_dataset.py, augment_symmetric.py (+ older augment_adversarial_examples.py)
-src/features/        feature_extractor.py (incl. canonicalize_url), transformation.py, url_perturbations.py
+                     canonicalize_dataset.py (one-off migration of a pre-fix dataset), augment_symmetric.py
+                     (+ older augment_adversarial_examples.py)
+src/features/        feature_extractor.py (incl. canonicalize_url), transformation.py, url_perturbations.py, shap_utils.py
 src/training/        model_trainer.py, extra_models.py, compare_models.py, adversarial_eval.py,
-                     explain_model.py, calibration_check.py, model_diagnostics.py, drift_and_latency.py
+                     explain_model.py, calibration_check.py, model_diagnostics.py, drift_and_latency.py,
+                     forward_in_time.py, rank_free_comparison.py
 src/serving/         app.py (FastAPI: /demo checker, /analysis page, POST /predict)
 tests/               test_url_canonicalization.py (14 tests)
 final_model/         saved metrics and reports (model files are not committed)
@@ -69,6 +83,10 @@ python src\training\adversarial_eval.py --tag canon_symm --split test
 python src\training\explain_model.py
 python src\training\calibration_check.py
 python src\training\model_diagnostics.py
+python src\training\drift_and_latency.py
+python src\training\forward_in_time.py
+python src\training\model_trainer.py --exclude-features tranco_rank,tranco_rank_was_missing --output-suffix ablation_no_rank
+python src\training\rank_free_comparison.py
 python -m pytest tests -q
 ```
 
