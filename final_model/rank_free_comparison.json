@@ -1,0 +1,143 @@
+{
+  "n_test": 795,
+  "n_bootstrap": 10000,
+  "seed": 42,
+  "models": {
+    "full": {
+      "label": "full XGBoost",
+      "f1": 0.9830949284785435,
+      "precision": 0.9692307692307692,
+      "recall": 0.9973614775725593,
+      "auc": 0.9988139334280496,
+      "fp": 12,
+      "fn": 1,
+      "pooled_legit_false_alarms": 25,
+      "pooled_legit_n": 832,
+      "pooled_legit_fpr": 0.030048076923076924,
+      "pooled_legit_fpr_ci95": [
+        0.020434353347593994,
+        0.04398167954667688
+      ]
+    },
+    "xgboost": {
+      "label": "no-rank XGBoost",
+      "f1": 0.974025974025974,
+      "precision": 0.959079283887468,
+      "recall": 0.9894459102902374,
+      "auc": 0.9948815201948447,
+      "fp": 16,
+      "fn": 4,
+      "pooled_legit_false_alarms": 34,
+      "pooled_legit_n": 832,
+      "pooled_legit_fpr": 0.040865384615384616,
+      "pooled_legit_fpr_ci95": [
+        0.029388903960241013,
+        0.05656230976255049
+      ]
+    },
+    "random_forest": {
+      "label": "no-rank Random Forest",
+      "f1": 0.9791666666666666,
+      "precision": 0.9665809768637532,
+      "recall": 0.9920844327176781,
+      "auc": 0.9967462451796225,
+      "fp": 13,
+      "fn": 3,
+      "pooled_legit_false_alarms": 33,
+      "pooled_legit_n": 832,
+      "pooled_legit_fpr": 0.039663461538461536,
+      "pooled_legit_fpr_ci95": [
+        0.028379859011269406,
+        0.05517855684168646
+      ]
+    },
+    "decision_tree": {
+      "label": "no-rank Decision Tree",
+      "f1": 0.9604221635883905,
+      "precision": 0.9604221635883905,
+      "recall": 0.9604221635883905,
+      "auc": 0.9825071037142277,
+      "fp": 15,
+      "fn": 15,
+      "pooled_legit_false_alarms": 50,
+      "pooled_legit_n": 832,
+      "pooled_legit_fpr": 0.06009615384615385,
+      "pooled_legit_fpr_ci95": [
+        0.045879272611573096,
+        0.0783567070285884
+      ]
+    },
+    "logistic_regression": {
+      "label": "no-rank Logistic Regression",
+      "f1": 0.9314359637774903,
+      "precision": 0.9137055837563451,
+      "recall": 0.9498680738786279,
+      "auc": 0.9834331236046275,
+      "fp": 34,
+      "fn": 19,
+      "pooled_legit_false_alarms": 80,
+      "pooled_legit_n": 832,
+      "pooled_legit_fpr": 0.09615384615384616,
+      "pooled_legit_fpr_ci95": [
+        0.07793800950492068,
+        0.11808190623030955
+      ]
+    }
+  },
+  "paired_vs_full": {
+    "xgboost": {
+      "label": "no-rank XGBoost",
+      "delta_f1": 0.0090689544525695,
+      "delta_f1_ci95": [
+        -0.0024823395589449347,
+        0.02141682926934408
+      ],
+      "other_wrong_full_right": 15,
+      "full_wrong_other_right": 8,
+      "mcnemar_p": 0.21003961563110352,
+      "bonferroni_alpha": 0.0125,
+      "verdict": "no detectable difference"
+    },
+    "random_forest": {
+      "label": "no-rank Random Forest",
+      "delta_f1": 0.0039282618118768875,
+      "delta_f1_ci95": [
+        -0.007556601034230978,
+        0.01552263068720433
+      ],
+      "other_wrong_full_right": 12,
+      "full_wrong_other_right": 9,
+      "mcnemar_p": 0.6636238098144531,
+      "bonferroni_alpha": 0.0125,
+      "verdict": "no detectable difference"
+    },
+    "decision_tree": {
+      "label": "no-rank Decision Tree",
+      "delta_f1": 0.02267276489015302,
+      "delta_f1_ci95": [
+        0.007737619577319638,
+        0.0379850733306516
+      ],
+      "other_wrong_full_right": 26,
+      "full_wrong_other_right": 9,
+      "mcnemar_p": 0.005988120567053557,
+      "bonferroni_alpha": 0.0125,
+      "verdict": "full better"
+    },
+    "logistic_regression": {
+      "label": "no-rank Logistic Regression",
+      "delta_f1": 0.051658964701053245,
+      "delta_f1_ci95": [
+        0.033464969998112125,
+        0.07056824669558974
+      ],
+      "other_wrong_full_right": 48,
+      "full_wrong_other_right": 8,
+      "mcnemar_p": 4.688184102041859e-08,
+      "bonferroni_alpha": 0.0125,
+      "verdict": "full better"
+    }
+  },
+  "full_model_false_alarm_rank_present": 0.03,
+  "full_model_false_alarm_rank_missing": 0.3462
+}
